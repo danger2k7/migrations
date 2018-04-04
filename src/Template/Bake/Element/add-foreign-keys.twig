@@ -1,0 +1,42 @@
+{% set statement = Migration.tableStatement(table, true) %}
+{% set hasProcessedConstraint = false %}
+
+{% for constraint in constraints %}
+    {% set constraintColumns = constraint.columns|sort %}
+    {% if constraint.type != 'unique' %}
+        {% set hasProcessedConstraint = true %}
+        {% set columnsList = '\'' ~ constraint.columns.0 ~ '\''  %}
+        {% if (constraint.columns|count > 1) %}
+            {% set columnsList = '[' ~ Migration.stringifyList(constraint.columns, {'indent': 5}) ~ ']' %}
+        {% endif %}
+        $this->Migration->returnedData['dropForeignKeys'][$table][] = $columnsList;
+
+        {% if constraint.references.1 is iterable %}
+            {% set columnsReference = '[' ~ Migration.stringifyList(constraint.references.1, {'indent': 5}) ~ ']' %}
+        {% else %}
+            $columnsReference = '\'' . $constraint['references'][1] . '\'';
+            {% set columnsReference = '\'' ~ constraint.references.1 ~ '\'' %}
+        {% endif %}
+
+        {% if statement not is set %}
+            {% set statement = Migration.tableStatement(table) %}
+        {% endif %}
+
+        {% if statement not is empty %}
+            {{ statement }}
+            {% set statement = null %}
+        {% endif %}
+        ->addForeignKey(
+        {% columnsList %},
+        '{% constraint.references.0 %}',
+        {% columnsReference %},
+        {
+        'update': '{% Migration.formatConstraintAction(constraint.update) %}',
+        'delete': '{% Migration.formatConstraintAction(constraint.delete) %}'
+        }
+        )
+    {% endif %}
+{% endfor %}
+{% if (Migration->tableStatements[table] is set and hasProcessedConstraint): %}
+    ->update();
+{% endif %}
